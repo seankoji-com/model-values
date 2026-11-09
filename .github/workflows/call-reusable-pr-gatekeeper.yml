@@ -5,12 +5,6 @@
 # Uses this repository's own GITHUB_TOKEN to post the check run — never an App
 # identity, so the ruleset's context match stays unambiguous.
 name: PR Gatekeeper
-run-name: >-
-  Gate refresh (${{ github.event_name }}) ·
-  ${{ github.event.workflow_run.name || (github.event_name == 'pull_request_target' && 'seed pending CI') ||
-  (github.event_name == 'pull_request_review' && 'review evidence') || 'CI and review evidence' }} ·
-  ${{ (github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number)) ||
-  (inputs.persona_pr && format('PR #{0}', inputs.persona_pr)) || inputs.head_sha || github.event.workflow_run.head_sha }}
 
 on:
   # The wildcard is deliberate and load-bearing: `workflows` is a REQUIRED key
@@ -126,15 +120,11 @@ jobs:
     #     would burn workflow_run's three-level chain cap.
     #   - `pull_requests` is empty on fork runs, so the event allowlist is what
     #     keeps fork PRs gated rather than ignored.
-    #   - pull_request_review evaluates directly for same-repo PRs when a persona
-    #     bot or maintainer submits, edits, or dismisses a review. Fork PR reviews
-    #     have read-only tokens and cannot write checks; they evaluate via the
-    #     privileged workflow_run route.
+    #   - On `pull_request_target` the job's own queued composite check run is
+    #     the pending seed: it carries the required name with no runner needed.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'pull_request_target' ||
-      (github.event_name == 'pull_request_review' &&
-       github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'workflow_run' &&
        (github.event.workflow_run.name != 'PR Gatekeeper' ||
         github.event.workflow_run.event == 'pull_request_review') &&
@@ -144,7 +134,7 @@ jobs:
     with:
       head_sha: ${{ github.event.workflow_run.pull_requests[0].head.sha || github.event.workflow_run.head_sha || github.event.pull_request.head.sha || inputs.head_sha }}
       review_run_id: ${{ github.event.workflow_run.event == 'pull_request_review' && format('{0}', github.event.workflow_run.id) || '' }}
-      runner-json: '["ubuntu-latest"]' # runner-keep-hosted (public repo: hosted minutes are free; fork PRs must not reach org runners)
+      runner-json: '["ubuntu-latest"]'
       # Evaluate only the event's head. The hub reconciler recovers stale gates.
       sweep: event
       seed: ${{ github.event_name == 'pull_request_target' }}
